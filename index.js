@@ -61,7 +61,7 @@ async function start(file) {
     gradient: ['red', 'magenta'],
   });
 
-  say(`Bot creado por Bruno Sobrino`, {
+  say(`Bot creado por Saul.sy`, {
     font: 'console',
     align: 'center',
     gradient: ['red', 'magenta'],

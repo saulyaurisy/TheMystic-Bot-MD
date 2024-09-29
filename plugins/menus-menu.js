@@ -204,8 +204,6 @@ ${tradutor.texto1[9]} ${user.premiumTime > 0 ? '✅' : (isPrems ? '✅' : '❌')
   ├❧ _${usedPrefix}stickerpack *<url>*_
   ├❧ _${usedPrefix}wallpaper *<txt>*_ 
   ├❧ _${usedPrefix}dapk2 *<url>*_
-  ├❧ _${usedPrefix}xnxxdl *<url>*_ (🔞)
-  ├❧ _${usedPrefix}xvideosdl *<url>*_ (🔞)
   ╰───── • ◆ • ─────╯
 
  ${tradutor.texto1[16]}

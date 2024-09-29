@@ -1,304 +1,140 @@
-import fetch from 'node-fetch';
-import axios from 'axios';
-import { youtubedl, youtubedlv2 } from '@bochilteam/scraper';
-import fs from "fs";
-import yts from 'yt-search';
-import ytmp33 from '../src/libraries/ytmp33.js';
-import ytmp44 from '../src/libraries/ytmp44.js';
-import ytdl from 'ytdl-core';
+import { join, dirname } from 'path';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import { setupMaster, fork } from 'cluster';
+import cfonts from 'cfonts';
+import readline from 'readline';
+import yargs from 'yargs';
+import chalk from 'chalk'; 
+import fs from 'fs'; 
+import './config.js';
 
-let limit1 = 100;
-let limit2 = 400;
-let limit_a1 = 50;
-let limit_a2 = 400;
+const { PHONENUMBER_MCC } = await import('baileys');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(__dirname);
+const { say } = cfonts;
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+let isRunning = false;
 
-const handler = async (m, { conn, command, args, text, usedPrefix }) => {
-  const datas = global;
-  const idioma = datas.db.data.users[m.sender].language || global.defaultLenguaje;
-  const _translate = JSON.parse(fs.readFileSync(`./src/languages/${idioma}.json`));
-  const tradutor = _translate.plugins.descargas_play;
+const question = (texto) => new Promise((resolver) => rl.question(texto, resolver));
 
-  if (!text) throw `${tradutor.texto1[0]} _${usedPrefix + command} ${tradutor.texto1[1]}`;
+console.log(chalk.yellow.bold('—◉ㅤIniciando sistema...'));
 
-  const yt_play = await search(args.join(' '));
-  let additionalText = '';
-  if (['play', 'play3', 'playdoc'].includes(command)) {
-    additionalText = 'audio';
-  } else if (['play2', 'play4', 'playdoc2'].includes(command)) {
-    additionalText = 'vídeo';
+function verificarOCrearCarpetaAuth() {
+  const authPath = join(__dirname, global.authFile);
+  if (!fs.existsSync(authPath)) {
+    fs.mkdirSync(authPath, { recursive: true });
+  }
+}
+
+function verificarCredsJson() {
+  const credsPath = join(__dirname, global.authFile, 'creds.json');
+  return fs.existsSync(credsPath);
+}
+
+function formatearNumeroTelefono(numero) {
+  let formattedNumber = numero.replace(/[^\d+]/g, '');
+  if (formattedNumber.startsWith('+52') && !formattedNumber.startsWith('+521')) {
+    formattedNumber = formattedNumber.replace('+52', '+521');
+  } else if (formattedNumber.startsWith('52') && !formattedNumber.startsWith('521')) {
+    formattedNumber = `+521${formattedNumber.slice(2)}`;
+  } else if (formattedNumber.startsWith('52') && formattedNumber.length >= 12) {
+    formattedNumber = `+${formattedNumber}`;
+  } else if (!formattedNumber.startsWith('+')) {
+    formattedNumber = `+${formattedNumber}`;
+  }
+  return formattedNumber;
+}
+
+function esNumeroValido(numeroTelefono) {
+  const numeroSinSigno = numeroTelefono.replace('+', '');
+  return Object.keys(PHONENUMBER_MCC).some(codigo => numeroSinSigno.startsWith(codigo));
+}
+
+async function start(file) {
+  if (isRunning) return;
+  isRunning = true;
+
+  say('The Mystic\nBot', {
+    font: 'chrome',
+    align: 'center',
+    gradient: ['red', 'magenta'],
+  });
+
+  say(`Bot creado por Saul.sy`, {
+    font: 'console',
+    align: 'center',
+    gradient: ['red', 'magenta'],
+  });
+
+  verificarOCrearCarpetaAuth();
+
+  if (verificarCredsJson()) {
+    const args = [join(__dirname, file), ...process.argv.slice(2)];
+    setupMaster({ exec: args[0], args: args.slice(1) });
+    const p = fork();
+    return;
   }
 
-  if (!yt_play || !yt_play[0]?.title) return m.reply('> *[❗] Error: Audio/Video not found.*')
-  
-  const texto1 = `${tradutor.texto2[0]} ${yt_play[0].title}\n${tradutor.texto2[1]} ${yt_play[0].ago}\n${tradutor.texto2[2]} ${secondString(yt_play[0].duration.seconds)}\n${tradutor.texto2[3]} ${MilesNumber(yt_play[0].views)}\n${tradutor.texto2[4]} ${yt_play[0].author.name}\n${tradutor.texto2[5]} ${yt_play[0].videoId}\n${tradutor.texto2[6]} ${yt_play[0].type}\n${tradutor.texto2[7]} ${yt_play[0].url}\n${tradutor.texto2[8]} ${yt_play[0].author.url}\n\n> ${tradutor.texto2[9]} ${additionalText}, ${tradutor.texto2[10]}`.trim();
+  const opcion = await question(chalk.yellowBright.bold('—◉ㅤSeleccione una opción (solo el numero):\n') + chalk.white.bold('1. Con código QR\n2. Con código de texto de 8 dígitos\n—> '));
 
-  conn.sendMessage(m.chat, { image: { url: yt_play[0].thumbnail }, caption: texto1 }, { quoted: m });
-
-  if (['play', 'play3', 'playdoc'].includes(command)) {
-    try {
-      const { status, resultados, error } = await ytmp33(yt_play[0].url);
-      if (!status) throw new Error(error);
-
-      const ttl = resultados.titulo;
-      const buff_aud = await getBuffer(resultados.descargar);
-      const fileSizeInBytes = buff_aud.byteLength;
-      const fileSizeInKB = fileSizeInBytes / 1024;
-      const fileSizeInMB = fileSizeInKB / 1024;
-      const size = fileSizeInMB.toFixed(2);
-
-      if (size >= limit_a2) {
-        await conn.sendMessage(m.chat, { text: `${tradutor.texto3} _${resultados.descargar}_` }, { quoted: m });
-        return;
-      }
-      if (size >= limit_a1 && size <= limit_a2) {
-        await conn.sendMessage(m.chat, { document: buff_aud, mimetype: 'audio/mpeg', fileName: ttl + `.mp3` }, { quoted: m });
-        return;
-      } else {
-        if (['playdoc', 'play3'].includes(command)) return await conn.sendMessage(m.chat, { document: buff_aud, mimetype: 'audio/mpeg', fileName: ttl + `.mp3` }, { quoted: m });
-        await conn.sendMessage(m.chat, { audio: buff_aud, mimetype: 'audio/mpeg', fileName: ttl + `.mp3` }, { quoted: m });
-        return;
-      }
-    } catch (error) {
-      console.log('Fallo el 1: ' + error)
-      try {
-        const audio = `${global.MyApiRestBaseUrl}/api/v1/ytmp3?url=${yt_play[0].url}&apikey=${global.MyApiRestApikey}`;
-        const ttl = await yt_play[0].title;
-        const buff_aud = await getBuffer(audio);
-        const fileSizeInBytes = buff_aud.byteLength;
-        const fileSizeInKB = fileSizeInBytes / 1024;
-        const fileSizeInMB = fileSizeInKB / 1024;
-        const size = fileSizeInMB.toFixed(2);
-
-        if (size >= limit_a2) {
-          await conn.sendMessage(m.chat, { text: `${tradutor.texto3} _${audio}_` }, { quoted: m });
-          return;
-        }
-        if (size >= limit_a1 && size <= limit_a2) {
-          await conn.sendMessage(m.chat, { document: buff_aud, mimetype: 'audio/mpeg', fileName: ttl + `.mp3` }, { quoted: m });
-          return;
-        } else {
-          if (['playdoc', 'play3'].includes(command)) return await conn.sendMessage(m.chat, { document: buff_aud, mimetype: 'audio/mpeg', fileName: ttl + `.mp3` }, { quoted: m });
-          await conn.sendMessage(m.chat, { audio: buff_aud, mimetype: 'audio/mpeg', fileName: ttl + `.mp3` }, { quoted: m });
-          return;
-        }
-      } catch {
-        try {
-          const ttl = await yt_play[0].title;
-          const mediaa = await ytMp3(yt_play[0].url);
-          const buff_aud = await getBuffer(mediaa);
-          const fileSizeInBytes = buff_aud.byteLength;
-          const fileSizeInKB = fileSizeInBytes / 1024;
-          const fileSizeInMB = fileSizeInKB / 1024;
-          const size = fileSizeInMB.toFixed(2);
-         if (size >= limit_a2) {
-           await conn.sendMessage(m.chat, { text: `${tradutor.texto3} _${mediaa}_` }, { quoted: m });
-           return;
-         }
-         if (size >= limit_a1 && size <= limit_a2) {
-           await conn.sendMessage(m.chat, { document: buff_aud, mimetype: 'audio/mpeg', fileName: ttl + `.mp3` }, { quoted: m });
-           return;
-         } else {
-           if (['playdoc', 'play3'].includes(command)) return await conn.sendMessage(m.chat, { document: buff_aud, mimetype: 'audio/mpeg', fileName: ttl + `.mp3` }, { quoted: m });
-           await conn.sendMessage(m.chat, { audio: buff_aud, mimetype: 'audio/mpeg', fileName: ttl + `.mp3` }, { quoted: m });
-           return;
-         }
-      } catch {  
-        throw tradutor.texto4;
-      }
+  let numeroTelefono = '';
+  if (opcion === '2') {
+    const phoneNumber = await question(chalk.yellowBright.bold('\n—◉ㅤEscriba su número de WhatsApp:\n') + chalk.white.bold('◉ㅤEjemplo: +5219992095479\n—> '));
+    numeroTelefono = formatearNumeroTelefono(phoneNumber);
+    if (!esNumeroValido(numeroTelefono)) {
+      console.log(chalk.bgRed(chalk.white.bold('[ ERROR ] Número inválido. Asegúrese de haber escrito su numero en formato internacional y haber comenzado con el código de país.\n—◉ㅤEjemplo:\n◉ +5219992095479\n')));
+      process.exit(0);
     }
-   }
+    process.argv.push(numeroTelefono);
   }
 
-  if (['play2', 'play4', 'playdoc2'].includes(command)) {
-    try {
-      const { status, resultados, error } = await ytmp44(yt_play[0].url);
-      if (!status) throw new Error(error);
+  if (opcion === '1') {
+    process.argv.push('qr');
+  } else if (opcion === '2') {
+    process.argv.push('code');
+  }
 
-      const ttl2 = resultados.titulo;
-      const buff_vid = await getBuffer(resultados.descargar);
-      const fileSizeInBytes2 = buff_vid.byteLength;
-      const fileSizeInKB2 = fileSizeInBytes2 / 1024;
-      const fileSizeInMB2 = fileSizeInKB2 / 1024;
-      const size2 = fileSizeInMB2.toFixed(2);
+  const args = [join(__dirname, file), ...process.argv.slice(2)];
+  setupMaster({ exec: args[0], args: args.slice(1) });
 
-      if (size2 >= limit2) {
-        await conn.sendMessage(m.chat, { text: `${tradutor.texto5} _${resultados.descargar}_` }, { quoted: m });
-        return;
-      }
-      if (size2 >= limit1 && size2 <= limit2) {
-        await conn.sendMessage(m.chat, { document: buff_vid, mimetype: 'video/mp4', fileName: ttl2 + `.mp4` }, { quoted: m });
-        return;
-      } else {
-        if (['playdoc2', 'play4'].includes(command)) return await conn.sendMessage(m.chat, { document: buff_vid, mimetype: 'video/mp4', fileName: ttl2 + `.mp4` }, { quoted: m });
-        await conn.sendMessage(m.chat, { video: buff_vid, mimetype: 'video/mp4', fileName: ttl2 + `.mp4` }, { quoted: m });
-        return;
-      }
-    } catch (error) {
-      try {
-        const video = `${global.MyApiRestBaseUrl}/api/v1/ytmp4?url=${yt_play[0].url}&apikey=${global.MyApiRestApikey}`;
-        const ttl2 = await yt_play[0].title;
-        const buff_vid = await getBuffer(video);
-        const fileSizeInBytes2 = buff_vid.byteLength;
-        const fileSizeInKB2 = fileSizeInBytes2 / 1024;
-        const fileSizeInMB2 = fileSizeInKB2 / 1024;
-        const size2 = fileSizeInMB2.toFixed(2);
+  const p = fork();
 
-        if (size2 >= limit2) {
-          await conn.sendMessage(m.chat, { text: `${tradutor.texto5} _${video}_` }, { quoted: m });
-          return;
-        }
-        if (size2 >= limit1 && size2 <= limit2) {
-          await conn.sendMessage(m.chat, { document: buff_vid, mimetype: 'video/mp4', fileName: ttl2 + `.mp4` }, { quoted: m });
-          return;
-        } else {
-          if (['playdoc2', 'play4'].includes(command)) return await conn.sendMessage(m.chat, { document: buff_vid, mimetype: 'video/mp4', fileName: ttl2 + `.mp4` }, { quoted: m });
-          await conn.sendMessage(m.chat, { video: buff_vid, mimetype: 'video/mp4', fileName: ttl2 + `.mp4` }, { quoted: m });
-          return;
-        }
-      } catch {
-        try {
-          const ttl = await yt_play[0].title;
-          const mediaa = await ytMp4(yt_play[0].url);
-          const buff_vid = await getBuffer(mediaa);
-          const fileSizeInBytes = buff_vid.byteLength;
-          const fileSizeInKB = fileSizeInBytes / 1024;
-          const fileSizeInMB = fileSizeInKB / 1024;
-          const size = fileSizeInMB.toFixed(2);
-         if (size2 >= limit2) {
-           await conn.sendMessage(m.chat, { text: `${tradutor.texto5} _${mediaa}_` }, { quoted: m });
-           return;
-         }
-         if (size2 >= limit1 && size2 <= limit2) {
-           await conn.sendMessage(m.chat, { document: buff_vid, mimetype: 'video/mp4', fileName: ttl2 + `.mp4` }, { quoted: m });
-           return;
-         } else {
-           if (['playdoc2', 'play4'].includes(command)) return await conn.sendMessage(m.chat, { document: buff_vid, mimetype: 'video/mp4', fileName: ttl2 + `.mp4` }, { quoted: m });
-           await conn.sendMessage(m.chat, { video: buff_vid, mimetype: 'video/mp4', fileName: ttl2 + `.mp4` }, { quoted: m });
-           return;
-         }
-      } catch {          
-        throw tradutor.texto6;
-      }
+  p.on('message', (data) => {
+    console.log(chalk.green.bold('—◉ㅤRECIBIDO:'), data);
+    switch (data) {
+      case 'reset':
+        p.process.kill();
+        isRunning = false;
+        start.apply(this, arguments);
+        break;
+      case 'uptime':
+        p.send(process.uptime());
+        break;
     }
-   }
+  });
+
+  p.on('exit', (_, code) => {
+    isRunning = false;
+    console.error(chalk.red.bold('[ ERROR ] Ocurrió un error inesperado:'), code);
+    p.process.kill();
+    isRunning = false;
+    start.apply(this, arguments);
+    if (process.env.pm_id) {
+      process.exit(1);
+    } else {
+      process.exit();
+    }
+  });
+
+  const opts = new Object(yargs(process.argv.slice(2)).exitProcess(false).parse());
+  if (!opts['test']) {
+    if (!rl.listenerCount()) {
+      rl.on('line', (line) => {
+        p.emit('message', line.trim());
+      });
+    }
   }
-};
-
-handler.command = /^(play|play2|play3|play4|playdoc|playdoc2)$/i;
-export default handler;
-
-async function search(query, options = {}) {
-  const search = await yts.search({query, hl: 'es', gl: 'ES', ...options});
-  return search.videos;
 }
 
-function MilesNumber(number) {
-  const exp = /(\d)(?=(\d{3})+(?!\d))/g;
-  const rep = '$1.';
-  const arr = number.toString().split('.');
-  arr[0] = arr[0].replace(exp, rep);
-  return arr[1] ? arr.join('.') : arr[0];
-}
-
-function secondString(seconds) {
-  seconds = Number(seconds);
-  const d = Math.floor(seconds / (3600 * 24));
-  const h = Math.floor((seconds % (3600 * 24)) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  const dDisplay = d > 0 ? d + (d == 1 ? 'd ' : 'd ') : '';
-  const hDisplay = h > 0 ? h + (h == 1 ? 'h ' : 'h ') : '';
-  const mDisplay = m > 0 ? m + (m == 1 ? 'm ' : 'm ') : '';
-  const sDisplay = s > 0 ? s + (s == 1 ? 's' : 's') : '';
-  return dDisplay + hDisplay + mDisplay + sDisplay;
-}
-
-function bytesToSize(bytes) {
-  return new Promise((resolve, reject) => {
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    if (bytes === 0) return 'n/a';
-    const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)), 10);
-    if (i === 0) resolve(`${bytes} ${sizes[i]}`);
-    resolve(`${(bytes / (1024 ** i)).toFixed(1)} ${sizes[i]}`);
-  });
-}
-
-const getBuffer = async (url, options) => {
-    options ? options : {};
-    const res = await axios({method: 'get', url, headers: {'DNT': 1, 'Upgrade-Insecure-Request': 1,}, ...options, responseType: 'arraybuffer'});
-    return res.data;
-};
-
-async function ytMp3(url) {
-  return new Promise((resolve, reject) => {
-    ytdl.getInfo(url).then(async (getUrl) => {
-      const result = [];
-      for (let i = 0; i < getUrl.formats.length; i++) {
-        const item = getUrl.formats[i];
-        if (item.mimeType == 'audio/webm; codecs=\"opus\"') {
-          const {contentLength} = item;
-          const bytes = await bytesToSize(contentLength);
-          result[i] = {audio: item.url, size: bytes};
-        }
-      }
-      const resultFix = result.filter((x) => x.audio != undefined && x.size != undefined);
-      const tiny = await axios.get(`https://tinyurl.com/api-create.php?url=${resultFix[0].audio}`);
-      const tinyUrl = tiny.data;
-      const title = getUrl.videoDetails.title;
-      const thumb = getUrl.player_response.microformat.playerMicroformatRenderer.thumbnail.thumbnails[0].url;
-      resolve({title, result: tinyUrl, result2: resultFix, thumb});
-    }).catch(reject);
-  });
-}
-
-async function ytMp4(url) {
-  return new Promise(async (resolve, reject) => {
-    ytdl.getInfo(url).then(async (getUrl) => {
-      const result = [];
-      for (let i = 0; i < getUrl.formats.length; i++) {
-        const item = getUrl.formats[i];
-        if (item.container == 'mp4' && item.hasVideo == true && item.hasAudio == true) {
-          const {qualityLabel, contentLength} = item;
-          const bytes = await bytesToSize(contentLength);
-          result[i] = {video: item.url, quality: qualityLabel, size: bytes};
-        }
-      }
-      const resultFix = result.filter((x) => x.video != undefined && x.size != undefined && x.quality != undefined);
-      const tiny = await axios.get(`https://tinyurl.com/api-create.php?url=${resultFix[0].video}`);
-      const tinyUrl = tiny.data;
-      const title = getUrl.videoDetails.title;
-      const thumb = getUrl.player_response.microformat.playerMicroformatRenderer.thumbnail.thumbnails[0].url;
-      resolve({title, result: tinyUrl, rersult2: resultFix[0].video, thumb});
-    }).catch(reject);
-  });
-}
-
-async function ytPlay(query) {
-  return new Promise((resolve, reject) => {
-    yts(query).then(async (getData) => {
-      const result = getData.videos.slice( 0, 5 );
-      const url = [];
-      for (let i = 0; i < result.length; i++) {
-        url.push(result[i].url);
-      }
-      const random = url[0];
-      const getAudio = await ytMp3(random);
-      resolve(getAudio);
-    }).catch(reject);
-  });
-}
-
-async function ytPlayVid(query) {
-  return new Promise((resolve, reject) => {
-    yts(query).then(async (getData) => {
-      const result = getData.videos.slice( 0, 5 );
-      const url = [];
-      for (let i = 0; i < result.length; i++) {
-        url.push(result[i].url);
-      }
-      const random = url[0];
-      const getVideo = await ytMp4(random);
-      resolve(getVideo);
-    }).catch(reject);
-  });
-}
+start('main.js');
